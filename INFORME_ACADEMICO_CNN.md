@@ -11,9 +11,9 @@
 
 La inteligencia artificial aplicada a imágenes médicas ha demostrado utilidad en tareas de apoyo al diagnóstico, entre ellas la detección de patrones compatibles con **neumonía** en radiografías de tórax. Este tipo de imágenes presenta desafíos propios: variabilidad de adquisición, ruido, superposición de estructuras óseas y tejidos, y —en conjuntos públicos— frecuente **desbalance entre clases**.
 
-En este proyecto se aborda un problema de **clasificación supervisada binaria**: dada una radiografía, el sistema debe asignar la etiqueta **NORMAL** o **PNEUMONIA**. Para ello se diseña, implementa y evalúa una **red neuronal convolucional (CNN)** en **PyTorch**, siguiendo un flujo metodológico estándar en aprendizaje profundo: análisis exploratorio, preprocesamiento, modelado, validación, optimización de hiperparámetros y evaluación en un conjunto de prueba **independiente**.
+En este proyecto se aborda un problema de **clasificación supervisada binaria**: dada una radiografía, el sistema debe asignar la etiqueta **NORMAL** o **PNEUMONIA**. Para ello se diseña, implementa y evalúa una **red neuronal convolucional (CNN)** en **PyTorch**, siguiendo el flujo definido en el notebook: análisis exploratorio, preprocesamiento, modelado, validación, búsqueda de hiperparámetros y evaluación en un conjunto de prueba **independiente**.
 
-El informe no se limita a presentar código: se **justifica** cada decisión técnica (partición de datos, normalización, arquitectura, regularización y búsqueda de hiperparámetros) y se **interpreta** el desempeño del modelo en relación con la rúbrica de evaluación del curso.
+El informe documenta las decisiones técnicas del notebook y **interpreta** el desempeño obtenido, incluyendo la brecha entre validación y test.
 
 ---
 
@@ -21,27 +21,27 @@ El informe no se limita a presentar código: se **justifica** cada decisión té
 
 ### 2.1 Objetivo general
 
-Diseñar, implementar, entrenar y evaluar un modelo CNN capaz de clasificar radiografías de tórax en las categorías NORMAL y PNEUMONIA, documentando el proceso completo y optimizando hiperparámetros clave mediante **random search**.
+Diseñar, implementar, entrenar y evaluar un modelo CNN capaz de clasificar radiografías de tórax en las categorías NORMAL y PNEUMONIA, documentando el proceso completo y optimizando hiperparámetros mediante **random search**.
 
 ### 2.2 Objetivos específicos
 
 1. Realizar **análisis exploratorio (EDA)** y cuantificar el **desbalance de clases**.
-2. Aplicar **preprocesamiento** (redimensionamiento, escala de grises, normalización y aumentación controlada).
-3. Construir una CNN con capas **convolucionales**, **pooling** y **densas**, incluyendo **dropout** como regularización.
+2. Aplicar **preprocesamiento** (redimensionamiento a 128×128, escala de grises, normalización y aumentación controlada).
+3. Construir una CNN con capas **convolucionales**, **pooling** y **densas**, incluyendo **dropout**.
 4. Dividir datos en **entrenamiento** y **validación** (desde `train/`), reservando `test/` para evaluación final.
 5. Monitorear **pérdida** y **métricas** durante el entrenamiento; aplicar **early stopping**.
-6. Optimizar hiperparámetros (filtros, kernel, learning rate, épocas, dropout) y documentar su impacto.
-7. Reportar **accuracy**, **precision**, **recall**, **F1-score** y **matriz de confusión** en el conjunto de prueba, con interpretación clínica básica.
+6. Optimizar hiperparámetros mediante **random search** y reflexionar sobre su impacto.
+7. Reportar **accuracy**, **precision**, **recall**, **F1-score** y **matriz de confusión** en test, con interpretación clínica básica.
 
 ---
 
 ## 3. Descripción del dataset
 
-> **Código y ejecución:** los bloques de esta sección corresponden a `chest_xray_cnn.ipynb` — **§3. Análisis exploratorio (EDA)**. Ejecutar en orden: configuración (§2) → EDA (§3). Las salidas de consola y figuras siguientes se obtuvieron ejecutando ese notebook en el entorno `.venv`.
+> **Referencia:** `chest_xray_cnn.ipynb` — §2 Configuración y §3 Análisis exploratorio (EDA).
 
 ### 3.1 Origen y estructura
 
-El dataset está organizado en carpetas por clase (formato compatible con `ImageFolder` de torchvision):
+El dataset está organizado en carpetas por clase (formato `ImageFolder` de torchvision):
 
 ```
 chest_xray/
@@ -55,41 +55,16 @@ chest_xray/
 
 Cada imagen es un archivo **JPEG** en escala de grises (radiografía de tórax).
 
-### 3.2 Código: configuración de rutas y conteo por clase
+### 3.2 Configuración y conteo por clase
 
-En la celda de configuración se definen las rutas y una función auxiliar que **excluye archivos no imagen** (por ejemplo `.DS_Store`), evitando errores al abrir archivos con Pillow.
+En el notebook se definen las rutas, `IMG_SIZE = 128`, `BATCH_SIZE = 32`, `VAL_RATIO = 0.2` y una función `list_images()` que **excluye archivos no imagen** (por ejemplo `.DS_Store`).
 
-```python
-DATA_ROOT = Path("chest_xray")
-TRAIN_DIR = DATA_ROOT / "train"
-TEST_DIR = DATA_ROOT / "test"
-CLASSES = ["NORMAL", "PNEUMONIA"]
-IMAGE_EXTENSIONS = {".jpeg", ".jpg", ".png", ".bmp", ".gif", ".tif", ".tiff"}
-
-def list_images(folder: Path) -> list[Path]:
-    return sorted(
-        p for p in folder.iterdir()
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
-    )
-
-def count_images(root: Path) -> dict:
-    return {cls: len(list_images(root / cls)) for cls in CLASSES}
-
-train_counts = count_images(TRAIN_DIR)
-test_counts = count_images(TEST_DIR)
-
-print("TRAIN:", train_counts, "| Total:", sum(train_counts.values()))
-print("TEST: ", test_counts, "| Total:", sum(test_counts.values()))
-```
-
-**Salida obtenida al ejecutar** (`chest_xray_cnn.ipynb`, celda EDA — conteo):
+**Salida de consola (celda EDA — conteo):**
 
 ```
 TRAIN: {'NORMAL': 1349, 'PNEUMONIA': 3883} | Total: 5232
 TEST:  {'NORMAL': 234, 'PNEUMONIA': 390} | Total: 624
 ```
-
-**Interpretación:** el conjunto de entrenamiento es ~8,4 veces mayor que el de prueba. Dentro de train hay casi el triple de imágenes de neumonía que de normales.
 
 ### 3.3 Resultados: volumen y distribución
 
@@ -105,96 +80,34 @@ TEST:  {'NORMAL': 234, 'PNEUMONIA': 390} | Total: 624
 | Train | 74,2 % | 2,88 : 1 |
 | Test | 62,5 % | 1,67 : 1 |
 
-### 3.4 Código: gráfico de desbalance y métricas derivadas
+### 3.4 Visualización del desbalance
 
-```python
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-for ax, counts, title in zip(axes, [train_counts, test_counts], ["Train", "Test"]):
-    labels, values = list(counts.keys()), list(counts.values())
-    bars = ax.bar(labels, values, color=["#4C78A8", "#E45756"])
-    ax.set_title(f"Distribución de clases — {title}")
-    ax.set_ylabel("Número de imágenes")
-    for bar, v in zip(bars, values):
-        ax.text(bar.get_x() + bar.get_width() / 2, v + 20, str(v), ha="center")
-
-plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "eda_class_distribution.png", dpi=120)
-plt.show()
-
-for name, counts in [("Train", train_counts), ("Test", test_counts)]:
-    total = sum(counts.values())
-    ratio = counts["PNEUMONIA"] / counts["NORMAL"]
-    print(f"{name}: PNEUMONIA={counts['PNEUMONIA']/total:.1%} | "
-          f"Ratio PNEUMONIA/NORMAL={ratio:.2f}x")
-```
-
-**Salida obtenida al ejecutar** (misma celda, bloque de barras):
+**Salida de consola (gráfico de barras):**
 
 ```
 Train: PNEUMONIA=74.2% | Ratio PNEUMONIA/NORMAL=2.88x
 Test: PNEUMONIA=62.5% | Ratio PNEUMONIA/NORMAL=1.67x
 ```
 
-**Figura 1.** Distribución de clases (train y test)
+**Figura 1.** Distribución de clases (train y test) — `outputs/eda_class_distribution.png`
 
 ![Distribución de clases](outputs/eda_class_distribution.png)
 
 ### 3.5 Implicaciones para el modelado
 
-- El desbalance explica por qué la **accuracy** sola puede ser engañosa: un clasificador trivial que prediga siempre PNEUMONIA alcanzaría ~74 % de aciertos en train sin ser útil para detectar casos normales.
-- Se requieren métricas **por clase** y **ponderadas**, y compensación en la función de pérdida (**pesos de clase**).
-- El conjunto **test** no se utiliza durante entrenamiento ni búsqueda de hiperparámetros, garantizando una estimación menos optimista del rendimiento en datos no vistos.
+- El desbalance explica por qué la **accuracy** sola puede ser engañosa: un clasificador que prediga siempre PNEUMONIA alcanzaría ~62,5 % de aciertos en test sin ser clínicamente útil.
+- Se emplean **pesos de clase** en la pérdida y métricas **por clase** además de las ponderadas.
+- La carpeta **test/** no interviene en entrenamiento ni en la búsqueda de hiperparámetros.
 
-### 3.6 Código: exploración visual (muestras y tamaños)
+### 3.6 Exploración visual
 
-Se muestran 4 ejemplos por clase y una submuestra de tamaños originales para comprobar variabilidad espacial antes del resize.
+El notebook muestra ejemplos por clase y un scatter de tamaños originales (submuestra), confirmando **variabilidad espacial** entre radiografías antes del resize a 128×128.
 
-```python
-sample_paths = []
-for cls in CLASSES:
-    for p in list_images(TRAIN_DIR / cls)[:4]:
-        sample_paths.append((p, cls))
-
-widths, heights = [], []
-for cls in CLASSES:
-    for p in list_images(TRAIN_DIR / cls)[:80]:  # submuestra (modo rápido)
-        with Image.open(p) as im:
-            widths.append(im.size[0])
-            heights.append(im.size[1])
-
-fig, axes = plt.subplots(2, 4, figsize=(12, 6))
-for ax, (path, cls) in zip(axes.flat, sample_paths):
-    ax.imshow(Image.open(path).convert("L"), cmap="gray")
-    ax.set_title(cls)
-    ax.axis("off")
-plt.suptitle("Ejemplos por clase (train)")
-plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "eda_sample_images.png", dpi=120)
-plt.show()
-
-fig, ax = plt.subplots(figsize=(6, 4))
-ax.scatter(widths, heights, alpha=0.4, s=10)
-ax.set_xlabel("Ancho (px)")
-ax.set_ylabel("Alto (px)")
-ax.set_title("Tamaños originales (submuestra)")
-plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "eda_image_sizes.png", dpi=120)
-plt.show()
-```
-
-**Salida obtenida al ejecutar** (submuestra de 80 imágenes por clase para tamaños):
-
-```
-Tamaños (submuestra n=160): ancho min=502 max=2338, alto min=307 max=2025
-```
-
-El scatter confirma que **ancho y alto no son uniformes** entre radiografías (distintos equipos o recortes), lo que obliga a redimensionar a `IMG_SIZE × IMG_SIZE` en el preprocesamiento.
-
-**Figura 2.** Ejemplos por clase (train)
+**Figura 2.** Ejemplos por clase — `outputs/eda_sample_images.png`
 
 ![Ejemplos por clase](outputs/eda_sample_images.png)
 
-**Figura 3.** Tamaños originales (submuestra)
+**Figura 3.** Tamaños originales — `outputs/eda_image_sizes.png`
 
 ![Tamaños de imagen](outputs/eda_image_sizes.png)
 
@@ -202,44 +115,29 @@ El scatter confirma que **ancho y alto no son uniformes** entre radiografías (d
 
 ## 4. Preprocesamiento de datos
 
+> **Referencia:** `chest_xray_cnn.ipynb` — §4 Preprocesamiento.
+
 ### 4.1 Justificación general
 
-Las CNN exigen tensores de tamaño uniforme y escalas de intensidad comparables entre muestras. El preprocesamiento reduce la variabilidad irrelevante y mejora la estabilidad del gradiente durante el entrenamiento.
+Las CNN requieren tensores de tamaño uniforme y escalas comparables. El preprocesamiento reduce variabilidad irrelevante y estabiliza el entrenamiento.
 
-### 4.2 Modo rápido para demostración en CPU (`FAST_MODE = True`)
-
-El notebook incluye un **modo de ejecución acelerado** pensado para equipos sin GPU. No cambia la metodología del trabajo (EDA → CNN → validación → random search → test), pero reduce tiempo de cómputo:
-
-| Parámetro | Modo rápido | Modo completo (opcional) |
-|-----------|-------------|---------------------------|
-| `IMG_SIZE` | 64×64 | 128×128 |
-| `BATCH_SIZE` | 64 | 32 |
-| Filtros base (baseline) | 16 | 32 |
-| Épocas baseline | 4 (+ early stopping) | 10 |
-| Random search | 3 trials, épocas 3–5 | 8 trials, épocas 6–10 |
-| Estimación mean/std | Submuestra 400 imágenes | Dataset train completo |
-
-**Justificación académica:** en entornos docentes con CPU limitada, es preferible un pipeline **reproducible y completo** en tiempo razonable que un entrenamiento exhaustivo inacabado. Las métricas serán algo inferiores a una configuración de mayor resolución, pero **válidas para demostrar** el proceso y la interpretación de resultados.
-
-Para mayor precisión: en la celda de configuración, poner `FAST_MODE = False` y `IMG_SIZE = 128`.
-
-### 4.3 Pipeline implementado
+### 4.2 Pipeline implementado
 
 | Etapa | Descripción | Justificación |
 |-------|-------------|---------------|
-| Escala de grises (1 canal) | Conversión explícita a un canal | Las radiografías son inherentemente grises; un canal reduce parámetros frente a RGB artificial |
-| Resize 64×64 (rápido) / 128×128 (completo) | Redimensionamiento con `Resize` | Menor resolución = menos operaciones en convoluciones |
-| Normalización | `(x - mean) / std` | Estabiliza activaciones; mean y std calculados **solo en train** |
-| RandomHorizontalFlip (train) | Volteo horizontal con p = 0,5 | Aumentación ligera; el tórax presenta simetría aproximada |
+| Escala de grises (1 canal) | `Grayscale(num_output_channels=1)` | Las radiografías son inherentemente grises |
+| Resize 128×128 | `Resize((IMG_SIZE, IMG_SIZE))` | Tamaño fijo definido en configuración (`IMG_SIZE = 128`) |
+| Normalización | `(x - mean) / std` | Estabiliza activaciones; estadísticas calculadas **solo en train** |
+| RandomHorizontalFlip (train) | Volteo horizontal con p = 0,5 | Aumentación ligera; simetría aproximada del tórax |
 
-**Estadísticas de normalización (train):**
+**Estadísticas de normalización** (conjunto train completo, celda §4):
 
-- Media μ = **0,482**
-- Desviación estándar σ = **0,235**
+- Media μ ≈ **0,482**
+- Desviación estándar σ ≈ **0,235**
 
-### 4.4 Código: cálculo de media y desviación estándar
+Salida del notebook: `Mean/Std: [0.4823513627052307] [0.23516277968883514]`
 
-*Este bloque estima μ y σ sobre el conjunto de entrenamiento antes de definir las transformaciones definitivas.*
+### 4.3 Código representativo
 
 ```python
 base_transform = transforms.Compose([
@@ -247,16 +145,8 @@ base_transform = transforms.Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
     transforms.ToTensor(),
 ])
-tmp_ds = datasets.ImageFolder(TRAIN_DIR, transform=base_transform)
-tmp_loader = DataLoader(tmp_ds, batch_size=BATCH_SIZE, shuffle=False)
-MEAN, STD = compute_mean_std(tmp_loader)  # μ ≈ 0.482, σ ≈ 0.235
-```
+MEAN, STD = compute_mean_std(DataLoader(tmp_ds, ...))
 
-**Resultado esperado:** dos escalares para el canal único, reutilizados en train, validación y test para evitar **fuga de información** (data leakage).
-
-### 4.5 Código: transformaciones finales
-
-```python
 def get_transforms(mean, std, augment=False):
     ops = [
         transforms.Grayscale(num_output_channels=1),
@@ -264,64 +154,51 @@ def get_transforms(mean, std, augment=False):
     ]
     if augment:
         ops.append(transforms.RandomHorizontalFlip(p=0.5))
-    ops.extend([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std),
-    ])
+    ops.extend([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
     return transforms.Compose(ops)
-
-train_transform = get_transforms(MEAN, STD, augment=True)
-eval_transform = get_transforms(MEAN, STD, augment=False)
 ```
 
-**Interpretación:** la validación y el test usan `eval_transform` (sin aumentación) para medir el rendimiento en condiciones deterministas.
+Validación y test usan `eval_transform` (sin aumentación).
 
-### 4.6 Filtrado de archivos no válidos
+### 4.4 Entorno de ejecución
 
-Se excluyen archivos como `.DS_Store` mediante una función `list_images()` que solo admite extensiones de imagen (`.jpeg`, `.jpg`, `.png`, etc.), evitando errores en el EDA y conteos erróneos.
+El notebook se ejecutó en **CPU** con **PyTorch 2.12.0+cpu** (`device = cpu`). Por ello el entrenamiento baseline, los trials de random search y el modelo final usan **pocas épocas** (1–2 por experimento), tal como indica el propio notebook en la configuración de §2 (`N_RANDOM_TRIALS = 3`, `HP_TRIAL_EPOCHS = [1, 2]`).
 
 ---
 
 ## 5. Diseño e implementación del modelo CNN
 
+> **Referencia:** `chest_xray_cnn.ipynb` — §5 División train/val, §6 Arquitectura CNN.
+
 ### 5.1 Enfoque de diseño
 
-Se optó por una **CNN personalizada** (no transfer learning) para cumplir explícitamente con la consigna de capas convolucionales, pooling y densas. La arquitectura sigue el paradigma **feature extractor + classifier head**, habitual en visión por computador.
+Se implementa una **CNN personalizada** (`ChestXRayCNN`) con bloques convolucionales, batch normalization, ReLU, max pooling y cabeza densa con dropout, sin transfer learning.
 
 ### 5.2 Partición train / validación / test
 
-Desde `train/` (5 232 imágenes) se extrae un **20 % estratificado** para validación:
+Desde `train/` (5 232 imágenes) se extrae un **20 % estratificado** (`VAL_RATIO = 0.2`, `SEED = 42`):
 
 | Subconjunto | Tamaño |
 |-------------|--------|
 | Train interno | 4 187 |
 | Validación | 1 045 |
-| Test (carpeta `test/`) | 624 |
+| Test (`test/`) | 624 |
 
-```python
-train_idx, val_idx = stratified_indices(full_train_ds, val_ratio=0.2, seed=42)
-train_ds = Subset(full_train_ds, train_idx)
-val_ds = Subset(datasets.ImageFolder(TRAIN_DIR, transform=eval_transform), val_idx)
-```
-
-**Justificación del estratificado:** mantiene en validación la misma proporción NORMAL/PNEUMONIA que en train, haciendo más fiable la comparación entre experimentos.
+Salida: `Train: 4187 | Val: 1045 | Test: 624`
 
 ### 5.3 Esquema de la arquitectura
 
+Con `base_filters = f` (por defecto 32) y `IMG_SIZE = 128`:
+
 ```
 Entrada [1 × 128 × 128]
-    → Bloque 1: Conv → BN → ReLU → MaxPool  → [f × 64 × 64]
-    → Bloque 2: Conv → BN → ReLU → MaxPool  → [2f × 32 × 32]
-    → Bloque 3: Conv → BN → ReLU → MaxPool  → [4f × 16 × 16]
-    → Flatten → Linear(·, 256) → ReLU → Dropout → Linear(256, 2)
-Salida: logits para 2 clases
+    → Bloque 1: Conv(f) → BN → ReLU → MaxPool(2)  → [f × 64 × 64]
+    → Bloque 2: Conv(2f) → BN → ReLU → MaxPool(2) → [2f × 32 × 32]
+    → Bloque 3: Conv(4f) → BN → ReLU → MaxPool(2) → [4f × 16 × 16]
+    → Flatten → Linear(4f·16·16, 256) → ReLU → Dropout → Linear(256, 2)
 ```
 
-Con `base_filters = f = 32` por defecto: **f, 2f, 4f = 32, 64, 128** filtros.
-
-Tras tres poolings con `IMG_SIZE=64`: tamaño espacial final **8×8** (con IMG_SIZE=128 sería 16×16).
-
-**Parámetros entrenables:** con `base_filters=16` el modelo es notablemente más ligero que con 32 filtros (~8,5 M), lo que acelera cada época en CPU.
+Con f = 32: filtros **32, 64, 128**; vector aplanado de dimensión **128 × 16 × 16 = 32 768**.
 
 ---
 
@@ -329,127 +206,51 @@ Tras tres poolings con `IMG_SIZE=64`: tamaño espacial final **8×8** (con IMG_S
 
 ### 6.1 Capa convolucional (`Conv2d`)
 
-**Función:** aplicar filtros aprendibles que detectan patrones locales (bordes, texturas, opacidades).
-
-**Parámetros relevantes:**
-
-- `in_channels=1`, `out_channels=f` (luego 2f, 4f): profundidad creciente para representaciones más abstractas.
-- `kernel_size` (3 o 5 en experimentos): tamaño del campo receptivo local.
-- `padding = kernel_size // 2`: preserva altura y ancho antes del pooling cuando stride = 1.
-
-**Justificación:** en imágenes médicas, patologías como consolidaciones o infiltrados pueden manifestarse como variaciones locales de intensidad capturables por convoluciones de bajo nivel en capas iniciales y combinadas en capas profundas.
+Detecta patrones locales (bordes, texturas, opacidades). `kernel_size` 3 o 5 en los experimentos; `padding = kernel_size // 2` preserva dimensiones antes del pooling.
 
 ### 6.2 Batch Normalization (`BatchNorm2d`)
 
-**Función:** normalizar activaciones por canal y mini-batch.
+Normaliza activaciones por canal y mini-batch; acelera convergencia y actúa como regularizador leve.
 
-**Beneficios:** acelera convergencia, permite tasas de aprendizaje más altas y actúa como regularizador leve al introducir ruido batch-dependent durante entrenamiento.
+### 6.3 ReLU
 
-### 6.3 Función de activación ReLU
-
-**Función:** `f(x) = max(0, x)` — introduce no linealidad sin saturación en la región positiva (frente a sigmoid/tanh en capas profundas).
-
-**Justificación:** estándar en CNN modernas por eficiencia computacional y mitigación parcial del desvanecimiento del gradiente.
+Introduce no linealidad sin saturación en la región positiva.
 
 ### 6.4 Max Pooling (`MaxPool2d(2)`)
 
-**Función:** submuestreo tomando el máximo en ventanas 2×2.
+Reduce resolución espacial (128 → 64 → 32 → **16**), aporta invariancia local y amplía el campo receptivo.
 
-**Efectos:**
+### 6.5 Capas densas y dropout
 
-- Reduce dimensionalidad espacial (menos parámetros en capas siguientes).
-- Aporta **invariancia** a pequeños desplazamientos.
-- Aumenta el campo receptivo efectivo en capas posteriores.
+La cabeza combina características globales (256 unidades) y produce **2 logits**. `Dropout` (0,3–0,5) mitiga sobreajuste en la parte totalmente conectada.
 
-Tras tres poolings: 128 → 64 → 32 → **16** píxeles de lado.
+### 6.6 Función de pérdida
 
-### 6.5 Aplanamiento (`Flatten`)
+`CrossEntropyLoss` con pesos de clase calculados sobre train:
 
-Convierte el tensor `[4f × 16 × 16]` en un vector unidimensional para las capas totalmente conectadas.
+| Clase | Peso |
+|-------|------|
+| NORMAL | 1,94 |
+| PNEUMONIA | 0,67 |
 
-### 6.6 Capas densas (`Linear`)
-
-- **Primera densa (→ 256):** combina características de alto nivel aprendidas en los mapas de activación.
-- **Segunda densa (→ 2):** produce **logits** para NORMAL y PNEUMONIA.
-
-La salida se pasa por **softmax** implícito dentro de `CrossEntropyLoss` en PyTorch.
-
-### 6.7 Dropout
-
-**Función:** durante entrenamiento, anula aleatoriamente un porcentaje de neuronas (p = 0,3–0,5).
-
-**Justificación:** combate **sobreajuste** en el clasificador, que concentra muchos parámetros respecto a las capas convolucionales en este diseño.
-
-### 6.8 Código: definición del modelo
-
-```python
-class ChestXRayCNN(nn.Module):
-    def __init__(self, num_classes=2, base_filters=32, kernel_size=3, dropout=0.5):
-        super().__init__()
-        pad = kernel_size // 2
-        f1, f2, f3 = base_filters, base_filters * 2, base_filters * 4
-
-        self.features = nn.Sequential(
-            nn.Conv2d(1, f1, kernel_size, padding=pad),
-            nn.BatchNorm2d(f1), nn.ReLU(inplace=True), nn.MaxPool2d(2),
-            nn.Conv2d(f1, f2, kernel_size, padding=pad),
-            nn.BatchNorm2d(f2), nn.ReLU(inplace=True), nn.MaxPool2d(2),
-            nn.Conv2d(f2, f3, kernel_size, padding=pad),
-            nn.BatchNorm2d(f3), nn.ReLU(inplace=True), nn.MaxPool2d(2),
-        )
-        reduced = IMG_SIZE // 8  # 16 para IMG_SIZE=128
-        flat_dim = f3 * reduced * reduced
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(flat_dim, 256), nn.ReLU(inplace=True),
-            nn.Dropout(p=dropout),
-            nn.Linear(256, num_classes),
-        )
-
-    def forward(self, x):
-        return self.classifier(self.features(x))
-```
+Salida del notebook: `Pesos de clase: tensor([1.9392, 0.6737])`
 
 ---
 
 ## 7. Entrenamiento del modelo
 
-### 7.1 Función de pérdida y pesos de clase
+> **Referencia:** `chest_xray_cnn.ipynb` — §7 Entrenamiento, §8 Baseline.
 
-Se utiliza **entropía cruzada categórica** (`CrossEntropyLoss`) con pesos inversamente proporcionales a la frecuencia de clase:
+### 7.1 Optimizador y procedimiento
 
-| Clase | Índice | Peso en loss |
-|-------|--------|--------------|
-| NORMAL | 0 | 1,94 |
-| PNEUMONIA | 1 | 0,67 |
+- **Adam** con `weight_decay = 1e-4`.
+- **Batch size = 32**.
+- Por época: entrenamiento con gradiente; validación sin gradiente; registro de loss y F1 ponderado.
+- **Early stopping:** si el F1 de validación no mejora durante `patience` épocas, se restauran los pesos del mejor epoch.
 
-**Justificación:** penalizar más los errores sobre la clase minoritaria (NORMAL) equilibra la contribución al gradiente y mejora recall de la clase menos frecuente.
+### 7.2 Entrenamiento baseline
 
-```python
-class_weights = get_class_weights(full_train_ds)  # tensor([1.94, 0.67])
-criterion = nn.CrossEntropyLoss(weight=class_weights.to(device))
-```
-
-### 7.2 Optimizador y regularización adicional
-
-- **Adam** con `learning_rate` configurable y `weight_decay = 1e-4` (regularización L2).
-- **Batch size = 32:** equilibrio entre estabilidad del gradiente y memoria.
-
-### 7.3 Procedimiento por época
-
-1. Modo train: forward, cálculo de loss, backward, actualización de pesos.
-2. Modo eval en validación: sin gradiente, mismas métricas.
-3. Registro de **loss** y **F1 ponderado** en train y validación.
-
-### 7.4 Early stopping
-
-Si el F1 de validación no mejora durante `patience` épocas consecutivas (3–5 según fase), se detiene el entrenamiento y se **restauran los pesos** del mejor epoch.
-
-**Justificación:** limita el sobreajuste cuando la loss de entrenamiento sigue bajando pero la validación degrada.
-
-### 7.5 Resultados del entrenamiento baseline
-
-Configuración de referencia antes de optimización sistemática:
+Configuración (§8 del notebook):
 
 | Hiperparámetro | Valor |
 |----------------|-------|
@@ -457,203 +258,160 @@ Configuración de referencia antes de optimización sistemática:
 | kernel_size | 3 |
 | dropout | 0,5 |
 | learning rate | 0,001 |
-| épocas máximas | 10 |
+| épocas | **1** |
 
-**Mejor resultado en validación:** F1 = **0,9758** (early stopping en época 7).
+**Salida:**
 
-| Época (última registrada) | Train loss | Train F1 | Val loss | Val F1 |
-|---------------------------|------------|----------|----------|--------|
-| 7 | 0,1139 | 0,9556 | 0,0610 | 0,9714 |
+```
+Época 1/1 | train loss=0.8486 f1=0.8970 | val loss=0.1767 f1=0.9261
+Mejor F1 validación (baseline): 0.9261
+```
 
-**Figura 4.** Curvas de entrenamiento baseline — `outputs/baseline_curves.png`
+**Figura 4.** Curvas baseline — `outputs/baseline_curves.png`
 
-### 7.6 Análisis preliminar: ¿overfitting o underfitting?
+### 7.3 Lectura preliminar del baseline
 
-| Indicador | Observación | Interpretación |
-|-----------|-------------|----------------|
-| Val F1 > Train F1 (época 7) | 0,9714 vs 0,9556 | No hay sobreajuste severo en ese punto; la regularización y pesos de clase pueden favorecer validación |
-| Early stopping activado | Época 7/10 | El modelo dejó de generalizar mejor antes del máximo de épocas planificado |
-| Loss train decreciente | 0,11 en train | Capacidad suficiente; no parece **underfitting** grave |
-
-**Conclusión provisional:** el baseline **aprende adecuadamente**; la optimización de hiperparámetros busca mejorar aún la generalización y estabilidad.
+Con una sola época el modelo ya alcanza F1 val ≈ 0,93, pero el entrenamiento es breve; conviene contrastar con test para valorar generalización real.
 
 ---
 
 ## 8. Optimización de hiperparámetros
 
-### 8.1 Motivación
+> **Referencia:** `chest_xray_cnn.ipynb` — §9 Random search.
 
-La arquitectura base fija el *pipeline*, pero el rendimiento depende de hiperparámetros: capacidad (filtros), tamaño de kernel, tasa de aprendizaje, duración del entrenamiento y dropout. Se requiere un método **sistemático** y **reproducible**.
+### 8.1 Espacio de búsqueda
 
-### 8.2 Espacio de búsqueda (grid teórico)
+Definido en el notebook (`HP_GRID`):
 
 | Hiperparámetro | Valores |
 |----------------|---------|
-| base_filters | 16, 32, 64 |
+| base_filters | 16, 32 |
 | kernel_size | 3, 5 |
-| learning rate | 1×10⁻⁴, 5×10⁻⁴, 1×10⁻³ |
-| epochs | 6, 10 |
+| learning rate | 5×10⁻⁴, 1×10⁻³ |
+| epochs (por trial) | 1, 2 |
 | dropout | 0,3, 0,5 |
 
-**Combinaciones totales:** 72.
+**Combinaciones totales:** 32. Se muestrean **3 trials** aleatorios (`N_RANDOM_TRIALS = 3`, semilla 42). Criterio: **máximo F1 en validación**.
 
-### 8.3 Estrategia: Random Search
+Salida inicial: `Grid total: 32 | Trials: 3 | épocas por trial: [1, 2]`
 
-Con `FAST_MODE = True` se muestrean **3 combinaciones** aleatorias (semilla 42) del grid reducido (16 y 32 filtros, 2 learning rates, épocas 3–5). Con `FAST_MODE = False` el notebook usa **8 trials** sobre un grid más amplio. El criterio de selección es el **máximo F1 en validación** por trial.
-
-> **Nota:** si ejecutaste una versión anterior del notebook (8 trials, IMG 128), las cifras de la tabla pueden variar. Usa siempre los valores impresos al final de tu ejecución para el informe.
-
-**Justificación frente a grid completo:** random search explora el espacio de forma eficiente; estudios empíricos (Bergstra & Bengio, 2012) muestran que suele encontrar configuraciones competitivas con menos experimentos.
-
-### 8.4 Resultados de los trials (validación)
+### 8.2 Resultados de los trials
 
 | Trial | Filtros | Kernel | LR | Épocas | Dropout | Mejor F1 (val) |
 |-------|---------|--------|-----|--------|---------|----------------|
-| **4** | 32 | 3 | 5×10⁻⁴ | 10 | 0,5 | **0,9846** |
-| 1 | 16 | 5 | 1×10⁻⁴ | 10 | 0,3 | 0,9838 |
-| 2 | 16 | 3 | 1×10⁻⁴ | 10 | 0,5 | 0,9838 |
-| 5 | 32 | 3 | 5×10⁻⁴ | 6 | 0,3 | 0,9828 |
-| 6 | 16 | 5 | 5×10⁻⁴ | 6 | 0,5 | 0,9791 |
-| 3 | 32 | 3 | 1×10⁻³ | 10 | 0,5 | 0,9778 |
+| **3** | 32 | 3 | 5×10⁻⁴ | 1 | 0,5 | **0,9675** |
+| 1 | 16 | 3 | 1×10⁻³ | 2 | 0,5 | 0,9642 |
+| 2 | 16 | 3 | 5×10⁻⁴ | 1 | 0,5 | 0,9352 |
 
-**Mejora respecto al baseline:** 0,9758 → **0,9846** (+0,88 puntos porcentuales en F1 val).
+**Mejora respecto al baseline:** 0,9261 → **0,9675** (+4,1 puntos porcentuales en F1 val).
 
-**Configuración óptima seleccionada (Trial 4):**
+**Configuración óptima (Trial 3):**
 
-```python
-BEST_HP = {
-    "base_filters": 32,
-    "kernel_size": 3,
-    "lr": 0.0005,
-    "epochs": 12,      # entrenamiento final ≥ épocas de búsqueda
-    "dropout": 0.5,
-}
+- base_filters = 32  
+- kernel_size = 3  
+- lr = 5×10⁻⁴  
+- dropout = 0,5  
+- epochs = 1 (en el trial ganador)
+
+### 8.3 Reflexión sobre hiperparámetros
+
+| Observación | Interpretación |
+|-------------|----------------|
+| 32 filtros supera a 16 en el mejor trial | Mayor capacidad ayuda con resolución 128×128 |
+| Trial 1 con 2 épocas bajó F1 en la 2.ª época (0,9642 → 0,9387) | Riesgo de sobreajuste o inestabilidad con pocas épocas extra |
+| lr = 5×10⁻⁴ mejor que 1×10⁻³ en trials comparables | Tasa moderada más estable en CPU con pocos pasos |
+
+**Figura 5.** Random search — `outputs/hyperparameter_search.png`
+
+### 8.4 Entrenamiento del modelo final
+
+> **Referencia:** `chest_xray_cnn.ipynb` — §10 Entrenamiento final.
+
+Se reentrena con los hiperparámetros del mejor trial (`BEST_HP` derivado de `best_row`). En la ejecución registrada:
+
+```
+Época 1/1 | train loss=0.4822 f1=0.9064 | val loss=0.1083 f1=0.9599
+F1 validación final: 0.9599
 ```
 
-### 8.5 Documentación de cambios durante la optimización
+**Figura 6.** Curvas modelo final — `outputs/final_curves.png`
 
-| Cambio | Efecto observado |
-|--------|------------------|
-| Filtros 16 → 32 (trials 1–2 vs 4–5) | Mayor capacidad; F1 val más alto con 32 filtros |
-| LR 1e-3 → 5e-4 (trial 3 vs 4) | Menor inestabilidad; trial 3 mostró más variación en val loss |
-| Kernel 5 vs 3 | Resultados mixtos; kernel 3 ganó en el mejor trial |
-| Dropout 0,5 | Presente en la mejor configuración; reduce sobreajuste en capas densas |
-| Menos épocas (6) | Trial 5 competitivo (0,9828) pero trial 4 con 10 épocas alcanzó el máximo |
-
-**Figura 5 (al completar notebook).** `outputs/hyperparameter_search.png`
-
-### 8.6 Entrenamiento del modelo final
-
-Con la configuración del Trial 4 se reentrena el modelo (≥ 12 épocas, early stopping con paciencia 5), guardando el checkpoint de mejor F1 en validación para la evaluación en test.
-
-> **Nota:** Ejecutar las celdas §10 y §11 del notebook para obtener el modelo final guardado en `outputs/best_cnn_model.pth` y las métricas de test definitivas.
+El checkpoint se guarda en `outputs/best_cnn_model.pth`.
 
 ---
 
 ## 9. Evaluación del modelo
 
-### 9.1 Protocolo de evaluación
+> **Referencia:** `chest_xray_cnn.ipynb` — §11 Evaluación en test.
+
+### 9.1 Protocolo
 
 | Aspecto | Criterio |
 |---------|----------|
-| Conjunto | 624 imágenes de `test/` (independiente) |
+| Conjunto | 624 imágenes de `test/` |
 | Transformaciones | `eval_transform` (sin augmentación) |
-| Modelo | Pesos del mejor epoch en validación (modelo final) |
-| Umbral de decisión | Argmax sobre logits (clase de mayor probabilidad) |
+| Modelo | Pesos del mejor epoch en validación (entrenamiento final) |
+| Decisión | Argmax sobre logits |
 
-### 9.2 Métricas seleccionadas
+### 9.2 Métricas globales en test
 
-| Métrica | Definición (intuición) | Relevancia en este problema |
-|---------|------------------------|----------------------------|
-| **Accuracy** | Proporción de aciertos global | Útil pero sesgada por desbalance |
-| **Precision** | De los predichos como clase X, cuántos son X | Controla falsas alarmas de neumonía |
-| **Recall** | De los verdaderos X, cuántos detecta el modelo | Crítico para no **omitir neumonías** |
-| **F1-score** | Media armónica de precision y recall | Balance entre ambos; métrica principal de optimización |
-
-Se reportan valores **ponderados** (weighted) para resumen global y desglose **por clase** en el reporte de clasificación.
-
-### 9.3 Código: evaluación en test
-
-```python
-test_loss, test_m = run_epoch(final_model, test_loader, criterion)
-print(classification_report(
-    test_m["y_true"], test_m["y_pred"],
-    target_names=["NORMAL", "PNEUMONIA"]
-))
-cm = confusion_matrix(test_m["y_true"], test_m["y_pred"])
-```
-
-**Resultado esperado:** impresión de métricas globales, tabla por clase y matriz 2×2 para interpretación.
-
----
-
-## 10. Métricas
-
-### 10.1 Métricas en validación (modelo optimizado — Trial 4)
+**Salida del notebook:**
 
 | Métrica | Valor |
 |---------|-------|
-| F1-score (ponderado) | **0,9846** |
-| Criterio de selección | Mejor epoch durante random search, trial 4 |
+| Loss | 1,1297 |
+| **Accuracy** | **0,6875** (68,75 %) |
+| **Precision** (ponderada) | **0,7917** |
+| **Recall** (ponderado) | **0,6875** |
+| **F1-score** (ponderado) | **0,6071** |
 
-### 10.2 Métricas en validación (baseline)
-
-| Métrica | Valor |
-|---------|-------|
-| F1-score (ponderado) | **0,9758** |
-
-### 10.3 Métricas en conjunto de prueba (test)
-
-> **Completar** tras ejecutar la celda de evaluación final del notebook. Sustituir los valores entre corchetes por los obtenidos en consola.
-
-| Métrica | Valor |
-|---------|-------|
-| Loss | [ejecutar notebook] |
-| **Accuracy** | [ejecutar notebook] |
-| **Precision** (ponderada) | [ejecutar notebook] |
-| **Recall** (ponderado) | [ejecutar notebook] |
-| **F1-score** (ponderado) | [ejecutar notebook] |
-
-### 10.4 Métricas por clase (test)
+### 9.3 Métricas por clase (test)
 
 | Clase | Precision | Recall | F1-score | Support |
 |-------|-----------|--------|----------|---------|
-| NORMAL | [ ] | [ ] | [ ] | 234 |
-| PNEUMONIA | [ ] | [ ] | [ ] | 390 |
+| NORMAL | 1,00 | 0,17 | 0,29 | 234 |
+| PNEUMONIA | 0,67 | 1,00 | 0,80 | 390 |
 
-**Orientación interpretativa (cuando dispongas de los números):**
+**Promedios (sklearn):** macro avg F1 ≈ 0,54; weighted avg F1 ≈ 0,61; accuracy reportada 0,69.
 
-- **Recall bajo en PNEUMONIA** → riesgo clínico alto (falsos negativos).
-- **Precision baja en PNEUMONIA** → muchos normales clasificados como neumonía.
-- Comparar con validación: si test << val, posible **sobreajuste a la partición de validación** o **shift** de distribución entre carpetas.
+### 9.4 Interpretación clínica y técnica
+
+El modelo en test muestra un patrón claro:
+
+- **Recall de PNEUMONIA = 1,00:** clasifica casi todas las neumonías como positivas (pocos falsos negativos).
+- **Recall de NORMAL = 0,17:** la mayoría de casos normales se clasifican como neumonía (muchos falsos positivos respecto a NORMAL).
+
+Esto es coherente con el **desbalance** y con **pocas épocas de entrenamiento**: el clasificador aprende a favorecer la clase mayoritaria (PNEUMONIA), obteniendo buen F1 en validación (~0,96) pero **generalización limitada en test** (F1 ponderado ≈ 0,61).
+
+La brecha **validación (0,96) vs test (0,61)** indica que las métricas de validación, con tan poco entrenamiento, no reflejan el comportamiento en la partición `test/` (posible **shift** de distribución: 74 % vs 62,5 % de PNEUMONIA).
+
+**Figura 7.** Matriz de confusión — `outputs/confusion_matrix_test.png`
+
+![Matriz de confusión test](outputs/confusion_matrix_test.png)
+
+Estimación a partir del reporte: ~40 verdaderos negativos (NORMAL bien clasificados), ~194 falsos positivos (NORMAL predichos como PNEUMONIA), ~390 verdaderos positivos de PNEUMONIA.
+
+---
+
+## 10. Métricas (resumen)
+
+| Fase | F1 (val) | Notas |
+|------|----------|-------|
+| Baseline (1 época) | 0,9261 | 32 filtros, lr 1e-3 |
+| Mejor trial random search | **0,9675** | Trial 3 |
+| Modelo final (1 época) | 0,9599 | Hiperparámetros del trial 3 |
+| **Test (independiente)** | **0,6071** (ponderado) | Accuracy 68,75 % |
 
 ---
 
 ## 11. Matriz de confusión e interpretación
 
-### 11.1 Estructura
-
-Para clasificación binaria, la matriz 2×2 contiene:
-
 |  | Pred NORMAL | Pred PNEUMONIA |
 |--|-------------|----------------|
-| **Real NORMAL** | Verdaderos negativos (VN) | Falsos positivos (FP) |
-| **Real PNEUMONIA** | Falsos negativos (FN) | Verdaderos positivos (VP) |
+| **Real NORMAL** | VN (~40) | FP (~194) |
+| **Real PNEUMONIA** | FN (~0) | VP (~390) |
 
-**Figura 6.** `outputs/confusion_matrix_test.png` (generar con celda §11 del notebook)
-
-### 11.2 Interpretación académica
-
-1. **Verdaderos positivos (VP):** neumonías correctamente identificadas — deseable maximizar en screening.
-2. **Falsos negativos (FN):** neumonía clasificada como normal — error **más grave** en un sistema de apoyo diagnóstico; suelen priorizarse políticas que maximicen recall de la clase patológica.
-3. **Falsos positivos (FP):** normal clasificado como neumonía — incrementa carga de revisión humana y posibles pruebas innecesarias.
-4. **Verdaderos negativos (VN):** normales correctamente descartados.
-
-La matriz debe leerse **junto con** precision y recall por clase, no de forma aislada.
-
-### 11.3 Relación con el desbalance del test
-
-Con 62,5 % de PNEUMONIA en test, una matriz “visualmente equilibrada” en diagonal puede ocultar mal rendimiento en NORMAL. Por ello el informe enfatiza métricas **por clase**.
+**Lectura:** el error más frecuente es clasificar radiografías **NORMAL** como **PNEUMONIA**. En un contexto clínico, eso implica muchas alarmas falsas; el bajo recall de NORMAL (17 %) es el principal problema del modelo en esta ejecución.
 
 ---
 
@@ -662,116 +420,106 @@ Con 62,5 % de PNEUMONIA en test, una matriz “visualmente equilibrada” en dia
 ### 12.1 Resumen del pipeline
 
 | Fase | Resultado principal |
-|------|-------------------|
-| EDA | Desbalance 2,88:1 en train; variabilidad de tamaños |
-| Preprocesamiento | 128×128, normalización μ=0,482, σ=0,235 |
-| Baseline | F1 val = 0,9758 |
-| Random search | Mejor F1 val = **0,9846** (32 filtros, k=3, lr=5e-4, dropout=0.5) |
-| Test | *[Completar tras ejecución final]* |
+|------|---------------------|
+| EDA | Desbalance 2,88:1 en train; 2,88× más PNEUMONIA que NORMAL |
+| Preprocesamiento | 128×128, μ≈0,482, σ≈0,235, flip horizontal en train |
+| Baseline | F1 val = 0,9261 (1 época) |
+| Random search (3 trials) | Mejor F1 val = **0,9675** |
+| Modelo final | F1 val = 0,9599 |
+| Test | F1 ponderado = **0,6071**; fuerte sesgo hacia PNEUMONIA |
 
 ### 12.2 Logros respecto a la consigna
 
-- CNN implementada con convolución, pooling, capas densas y dropout.
+- CNN con convolución, pooling, capas densas y dropout implementada en PyTorch.
 - División train/val/test metodológicamente correcta.
-- Regularización múltiple (dropout, weight decay, early stopping, pesos de clase).
-- Optimización documentada con tabla de trials y reflexión causal.
-- Artefactos reproducibles: notebook, `requirements.txt`, figuras en `outputs/`.
+- Regularización: dropout, weight decay, early stopping, pesos de clase.
+- Random search documentado con tabla de trials.
+- Evaluación completa en test con métricas y matriz de confusión.
 
-### 12.3 Limitaciones de la ejecución actual
+### 12.3 Limitaciones de esta ejecución
 
-- Entrenamiento en **CPU** → se usa modo rápido (`FAST_MODE`) para completar el flujo; menor resolución y menos trials que un estudio exhaustivo.
-- Resolución 64×64 en modo rápido → posible pérdida de detalle fino respecto a 128×128 o superior.
-- Sin validación cruzada k-fold.
-- Métricas de test pendientes de la última ejecución del notebook.
+- Entrenamiento muy corto (1–2 épocas) por restricción de tiempo en CPU.
+- Fuerte **desajuste validación–test**; el modelo no equilibra bien la clase NORMAL en test.
+- Sin validación cruzada k-fold ni transfer learning.
+- El dataset es académico; no es válido para despliegue clínico sin validación adicional.
 
 ---
 
-## 13. Análisis crítico y reflexión sobre el desempeño
+## 13. Análisis crítico y reflexión
 
-### 13.1 Calidad del aprendizaje
+### 13.1 Validación vs test
 
-El F1 de validación superior a **0,97** en baseline y **0,98** tras optimización indica que la arquitectura y el preprocesamiento son **apropiados** para el dataset. La mejora marginal pero consistente tras random search (+0,88 pp) sugiere que el espacio de hiperparámetros estaba razonablemente acotado y que el baseline ya era fuerte.
+El F1 en validación (~0,97) sugiere un modelo aparentemente excelente, pero en test cae a **0,61**. Esta discrepancia obliga a:
 
-### 13.2 Overfitting y underfitting
+1. No confiar solo en validación con entrenamientos muy breves.
+2. Analizar siempre **recall por clase**, especialmente de NORMAL.
+3. Considerar más épocas, mejor balanceo o umbrales de decisión distintos de 0,5.
 
-| Fenómeno | Evidencia en el proyecto | Valoración |
-|----------|-------------------------|------------|
-| **Overfitting** | En baseline, val F1 ≥ train F1 en mejor epoch; early stopping activo | No evidencia fuerte de sobreajuste en el punto seleccionado |
-| **Underfitting** | Loss de train baja; F1 train alto (~0,96) | Capacidad del modelo adecuada |
-| **Riesgo futuro** | Muchos trials con F1 > 0,98 en val | Posible optimismo; **test** es la prueba definitiva |
+### 13.2 Overfitting y sesgo de clase
 
-### 13.3 Sesgo por desbalance
+El trial 1 empeoró en la segunda época (F1 val 0,9642 → 0,9387), señal de posible sobreajuste al continuar entrenando. En test, el recall perfecto de PNEUMONIA junto al recall bajo de NORMAL indica **sesgo hacia la clase mayoritaria**, pese a los pesos en la loss.
 
-Aun con pesos en la loss, conviene analizar si el modelo favorece PNEUMONIA. La matriz de confusión en test y el recall por clase NORMAL son esenciales para una reflexión honesta.
+### 13.3 Validez externa
 
-### 13.4 Validez externa
-
-El dataset es un benchmark académico; **no** se debe extrapolar directamente a despliegue clínico sin validación prospectiva, ética y regulación correspondiente.
-
-### 13.5 Alineación con la rúbrica (autoevaluación)
-
-| Criterio | Nivel aspirado | Evidencia |
-|----------|----------------|-----------|
-| Implementación del modelo | Excelente (5) | CNN completa, configurable, documentada capa por capa |
-| Análisis y evaluación | Excelente (5) | Métricas múltiples, matriz interpretada; *completar números test* |
-| Optimización | Excelente (5) | Random search, tabla, reflexión por hiperparámetro |
-| Documentación | Excelente (5) | Informe estructurado + notebook reproducible |
+El conjunto Chest X-Ray es un benchmark educativo. Cualquier uso clínico requeriría validación prospectiva, revisión ética y cumplimiento normativo.
 
 ---
 
 ## 14. Conclusiones
 
-1. Se desarrolló un sistema de clasificación de radiografías de tórax basado en **CNN en PyTorch**, cumpliendo la estructura convolucional–pooling–densa exigida en la práctica.
-2. El **EDA** demostró **desbalance marcado**, lo que motivó pesos en la pérdida y métricas más allá de la accuracy.
-3. El **preprocesamiento** estandarizó entradas y aplicó normalización basada en estadísticas del train, evitando fuga de información.
-4. El **entrenamiento** con Adam, dropout, weight decay y early stopping produjo un baseline sólido (F1 val = 0,9758).
-5. La **optimización por random search** mejoró el rendimiento a F1 val = **0,9846** con filtros 32, kernel 3, lr = 5×10⁻⁴ y dropout 0,5.
-6. La evaluación en **test independiente** (al completar el notebook) permitirá cerrar el ciclo metodológico con métricas y matriz de confusión finales.
-7. El trabajo ilustra que el rendimiento en visión artificial depende tanto del **diseño arquitectónico** como de la **protocolización experimental** (particiones, métricas y búsqueda de hiperparámetros).
+1. Se implementó un pipeline completo en `chest_xray_cnn.ipynb` para clasificar radiografías NORMAL vs PNEUMONIA con una CNN personalizada en PyTorch.
+2. El EDA confirmó **desbalance marcado** (74 % PNEUMONIA en train), justificando pesos en la pérdida y métricas por clase.
+3. El preprocesamiento estandarizó entradas a **128×128** con normalización basada solo en train.
+4. El baseline (1 época) alcanzó F1 val = **0,9261**; el **random search** (3 trials) mejoró a F1 val = **0,9675** con 32 filtros, kernel 3, lr = 5×10⁻⁴ y dropout 0,5.
+5. En **test independiente**, el rendimiento fue moderado (F1 ponderado **0,61**, accuracy **69 %**), con **recall de NORMAL muy bajo (17 %)** y recall de PNEUMONIA del 100 %.
+6. El trabajo demuestra que métricas altas en validación no garantizan buen desempeño en test cuando el entrenamiento es limitado y las clases están desbalanceadas.
 
 ---
 
 ## 15. Recomendaciones futuras
 
-1. **Completar evaluación en test** y, si es posible, los 8 trials de random search en GPU.
-2. **Transfer learning** (ResNet-18/50, EfficientNet) preentrenado y fine-tuning comparativo.
-3. Aumentar resolución a **224×224** o superior si el hardware lo permite.
-4. **Validación cruzada estratificada k-fold** para estimaciones más robustas de métricas.
-5. Curvas **ROC** y **AUC**, y análisis de umbrales distintos de 0,5 según costo FN/FP.
-6. Técnicas avanzadas de balanceo: **oversampling** de NORMAL, **focal loss** o muestreo balanceado.
-7. **Grad-CAM** o mapas de activación para interpretabilidad visual de las decisiones.
-8. Validación en datos de otro hospital o dominio para estudiar **generalización externa**.
+1. Aumentar **épocas de entrenamiento** (con GPU si es posible) y monitorizar curvas train/val.
+2. Probar **umbrales de decisión** distintos para priorizar recall de NORMAL o de PNEUMONIA según coste clínico.
+3. **Transfer learning** (ResNet, EfficientNet) con fine-tuning.
+4. **Oversampling** de NORMAL, focal loss o muestreo balanceado por batch.
+5. **Validación cruzada estratificada** para estimaciones más robustas.
+6. **Grad-CAM** para interpretabilidad visual.
+7. Curvas **ROC/AUC** y análisis de generalización en datos de otro origen.
 
 ---
 
-## Referencias y anexos técnicos
+## Referencias y anexos
 
 ### Anexo A — Exportación a Word
 
 ```bash
-cd "c:\IC\Machine Learning II"
+cd "c:\IC\Machine_Learning_II_2026\MACHINE_LEARNING_II_IDL02"
 pandoc INFORME_ACADEMICO_CNN.md -o INFORME_ACADEMICO_CNN.docx
 ```
 
-Insertar figuras manualmente desde `outputs/` en las secciones indicadas.
+Insertar figuras desde `outputs/` en las secciones indicadas.
 
-### Anexo B — Checklist antes de entregar
-
-- [ ] Ejecutar celdas finales del notebook (modelo final + test)
-- [ ] Reemplazar valores `[ejecutar notebook]` en secciones 10 y 12
-- [ ] Insertar Figuras 1–6 en Word
-- [ ] Pegar contenido en plantilla institucional (carátula e índice)
-- [ ] Revisar ortografía y numeración de figuras/tablas
-
-### Anexo C — Archivos del proyecto
+### Anexo B — Archivos del proyecto
 
 | Archivo | Descripción |
 |---------|-------------|
-| `chest_xray_cnn.ipynb` | Notebook con pipeline completo |
+| `chest_xray_cnn.ipynb` | Notebook con pipeline completo (EDA → CNN → random search → test) |
 | `requirements.txt` | Dependencias Python |
-| `outputs/` | Gráficos y modelos exportados |
-| `.venv/` | Entorno virtual (no incluir en ZIP de entrega si pesa mucho) |
+| `outputs/` | Gráficos (`eda_*.png`, `baseline_curves.png`, `hyperparameter_search.png`, `final_curves.png`, `confusion_matrix_test.png`) y `best_cnn_model.pth` |
+
+### Anexo C — Estructura del notebook
+
+| Sección | Contenido |
+|---------|-----------|
+| §1–2 | Imports y configuración (`IMG_SIZE=128`, rutas, semilla) |
+| §3 | EDA y figuras de distribución |
+| §4 | Preprocesamiento y normalización |
+| §5–6 | División estratificada y arquitectura `ChestXRayCNN` |
+| §7–8 | Funciones de entrenamiento y baseline |
+| §9 | Random search (3 trials) |
+| §10–11 | Modelo final y evaluación en test |
+| §12 | Conclusiones del notebook |
 
 ---
 
-*Documento generado para integración en plantilla Word. Métricas de test: actualizar tras ejecutar §10–§11 de `chest_xray_cnn.ipynb`.*
+*Informe alineado con la ejecución documentada en `chest_xray_cnn.ipynb` (PyTorch 2.12.0+cpu). Figuras generadas al ejecutar todas las celdas del notebook.*
