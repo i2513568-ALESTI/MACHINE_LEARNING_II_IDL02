@@ -1,0 +1,84 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- Entorno virtual (no subir; recrear con: python -m venv .venv && pip install -r requirements.txt) ---
+.venv/
+**/.venv/
+venv/
+**/venv/
+ENV/
+env/
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# --- Variables de entorno / secretos ---
+.env
+.env.*
+!.env.example
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Word ---
+~$*.docx
+~$*.doc
+~$*.xlsx
+MACHINE_LEARNING_II_IDL02.docx
+
+# --- Machine Learning II: datos y salidas generadas ---
+# Dataset local (~1.2 GB). Colocar chest_xray/ manualmente con la misma estructura train/test.
+chest_xray/
+
+# Gráficos, modelos y CSV generados al ejecutar el notebook
+outputs/
+
+# Modelos PyTorch sueltos (por si se guardan fuera de outputs/)
+*.pth
+*.pt
+*.ckpt
+
+# --- Logs y cachés ---
+*.log
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Scripts auxiliares locales (si los creas) ---
+_patch_*.py
+_fix_*.py
+_bench_*.py
+_cells_dump.txt
+_all_cells.txt
