@@ -2,18 +2,66 @@
 
 **Asignatura:** Machine Learning II  
 **Tema:** Clasificación de imágenes con CNN (PyTorch)  
-**Dataset:** Chest X-Ray — clases NORMAL y PNEUMONIA  
+**Dataset:** Chest X-Ray Images (Pneumonia) — [Kaggle](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia)  
+**Clases:** NORMAL y PNEUMONIA  
 **Implementación:** `chest_xray_cnn.ipynb` | **Figuras:** `outputs/`
 
 ---
 
 ## 1. Introducción
 
-La inteligencia artificial aplicada a imágenes médicas ha demostrado utilidad en tareas de apoyo al diagnóstico, entre ellas la detección de patrones compatibles con **neumonía** en radiografías de tórax. Este tipo de imágenes presenta desafíos propios: variabilidad de adquisición, ruido, superposición de estructuras óseas y tejidos, y —en conjuntos públicos— frecuente **desbalance entre clases**.
+### 1.1 Contexto y motivación
 
-En este proyecto se aborda un problema de **clasificación supervisada binaria**: dada una radiografía, el sistema debe asignar la etiqueta **NORMAL** o **PNEUMONIA**. Para ello se diseña, implementa y evalúa una **red neuronal convolucional (CNN)** en **PyTorch**, siguiendo el flujo definido en el notebook: análisis exploratorio, preprocesamiento, modelado, validación, búsqueda de hiperparámetros y evaluación en un conjunto de prueba **independiente**.
+La **neumonía** es una infección respiratoria frecuente que, si no se detecta a tiempo, puede tener consecuencias graves. En la práctica clínica, la **radiografía de tórax** es una de las pruebas de imagen más utilizadas para orientar el diagnóstico. Interpretar estas imágenes requiere experiencia y tiempo; por ello, en los últimos años se ha investigado el uso de **aprendizaje profundo** como apoyo al especialista, no como sustituto del criterio médico.
 
-El informe documenta las decisiones técnicas del notebook y **interpreta** el desempeño obtenido, incluyendo la brecha entre validación y test.
+Este trabajo forma parte de la asignatura **Machine Learning II**, cuyo enfoque incluye el diseño de modelos para **clasificación de imágenes** con redes neuronales convolucionales (CNN), el análisis riguroso de los datos y la evaluación con métricas adecuadas cuando las clases no están balanceadas.
+
+### 1.2 Origen de los datos: Kaggle
+
+Las imágenes utilizadas en el proyecto proceden de la plataforma **Kaggle**, concretamente del conjunto público [**Chest X-Ray Images (Pneumonia)**](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia) (autor del repositorio en Kaggle: Paul Mooney). Este dataset difunde radiografías pediátricas de tórax organizadas en dos carpetas por etiqueta, en línea con el trabajo de Kermany *et al.* (*Cell*, 2018) sobre diagnóstico asistido por deep learning en oftalmología y su extensión a rayos X torácicos.
+
+En Kaggle el material se distribuye comprimido; tras descargarlo, se obtiene la carpeta local `chest_xray/` con subdirectorios `train/` y `test/`, cada uno con las clases `NORMAL` y `PNEUMONIA`. Esa estructura es la que consume el notebook mediante `torchvision.datasets.ImageFolder`.
+
+**Referencia del dataset en Kaggle:**  
+https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia
+
+### 1.3 ¿De qué trata el dataset?
+
+Se trata de un corpus de **radiografías de tórax en escala de grises** (archivos JPEG), etiquetadas de forma supervisada en dos categorías:
+
+| Clase | Significado |
+|-------|-------------|
+| **NORMAL** | Radiografía sin hallazgos compatibles con neumonía según la etiqueta del conjunto |
+| **PNEUMONIA** | Radiografía con signos asociados a neumonía según la etiqueta del conjunto |
+
+En total, el material descargado de Kaggle comprende **5 856 imágenes** repartidas así:
+
+- **Train:** 5 232 imágenes (1 349 NORMAL + 3 883 PNEUMONIA)  
+- **Test:** 624 imágenes (234 NORMAL + 390 PNEUMONIA)
+
+Las imágenes provienen de pacientes **pediátricos** (de 1 a 5 años, según la documentación del conjunto original). No incluyen metadatos clínicos adicionales en las carpetas (edad, sexo, tipo de neumonía, etc.): el aprendizaje se limita a la **señal visual** de la radiografía y la etiqueta binaria.
+
+### 1.4 ¿Por qué se eligió este dataset?
+
+Se seleccionó este conjunto de Kaggle por varias razones alineadas con los objetivos académicos del curso y con la viabilidad del proyecto:
+
+1. **Relevancia temática:** conecta visión por computador con un problema de salud concreto y fácil de comunicar (detección de neumonía vs. caso normal).
+2. **Formato adecuado para CNN:** imágenes 2D homogéneas (rayos X), ideal para practicar capas convolucionales, pooling y capas densas sin depender de transfer learning obligatorio.
+3. **Tamaño manejable:** miles de imágenes permiten entrenar en CPU (como en nuestra ejecución) manteniendo un pipeline completo: EDA, entrenamiento, validación y test.
+4. **Estructura estándar:** la organización por carpetas (`train` / `test` y nombre de clase) encaja directamente con PyTorch y con las prácticas habituales en competiciones y tutoriales de Kaggle.
+5. **Desafío realista:** el **desbalance entre clases** (más casos de PNEUMONIA que de NORMAL en train) obliga a ir más allá de la accuracy y a usar pesos en la pérdida, F1, recall por clase y matriz de confusión — competencias explícitas de la práctica.
+6. **Reproducibilidad:** al ser un benchmark muy citado en Kaggle y en bibliografía educativa, facilita comparar resultados y contrastar el propio informe con trabajos de referencia.
+
+### 1.5 Objetivos del trabajo (visión general)
+
+Desde la introducción, el propósito del proyecto puede resumirse así:
+
+- **Aprender y demostrar** un flujo completo de clasificación de imágenes médicas con CNN en PyTorch.  
+- **Explorar y documentar** el dataset de Kaggle (distribución de clases, visualización, preprocesamiento).  
+- **Construir y entrenar** un modelo propio con regularización y búsqueda de hiperparámetros.  
+- **Evaluar con rigor** en un conjunto de test reservado, interpretando métricas y limitaciones (sin pretender un producto clínico).
+
+El problema formal es de **clasificación supervisada binaria**: dada una radiografía, predecir **NORMAL** o **PNEUMONIA**. La implementación vive en `chest_xray_cnn.ipynb`; este informe describe las decisiones tomadas y **interpreta** los resultados obtenidos, incluida la diferencia entre el buen rendimiento en validación y el comportamiento más modesto en test.
 
 ---
 
@@ -39,7 +87,9 @@ Diseñar, implementar, entrenar y evaluar un modelo CNN capaz de clasificar radi
 
 > **Referencia:** `chest_xray_cnn.ipynb` — §2 Configuración y §3 Análisis exploratorio (EDA).
 
-### 3.1 Origen y estructura
+### 3.1 Origen (Kaggle) y estructura local
+
+Tras la descarga desde Kaggle, el proyecto utiliza la carpeta `chest_xray/` en la raíz del repositorio (ver `.gitignore`: el dataset no se sube a Git por su tamaño, ~1,2 GB). La estructura coincide con la del competición/conjunto público:
 
 El dataset está organizado en carpetas por clase (formato `ImageFolder` de torchvision):
 
@@ -53,7 +103,9 @@ chest_xray/
     └── PNEUMONIA/
 ```
 
-Cada imagen es un archivo **JPEG** en escala de grises (radiografía de tórax).
+Cada imagen es un archivo **JPEG** en escala de grises (radiografía de tórax pediátrica).
+
+**Nota metodológica:** Kaggle entrega ya una partición **train** y **test**. En el notebook, la carpeta `train/` se subdivide además en entrenamiento interno y **validación** (20 % estratificado); la carpeta `test/` de Kaggle se usa **únicamente** para la evaluación final, sin mezclarla con el entrenamiento ni con la búsqueda de hiperparámetros.
 
 ### 3.2 Configuración y conteo por clase
 
